@@ -18,77 +18,29 @@ object Sindy {
       .csv(path)
     );
 
-//    data.head.crossJoin(data(1)).show;
-//    data(0).join(data(1), data(0)("R_COMMENT") === data(1)("N_COMMENT"), joinType = "fullouter").show;
-//    println(data.zipWithIndex)
-
-//    println(data.zipWithIndex.flatMap(pair => pair._1.columns.zip(Stream.continually(pair._2))))
-//    val allColumns = data.zipWithIndex.flatMap(pair => pair._1.columns.zip(Stream.continually(pair._2)))
-
-    val cells = data
+    val inclusionLists = data
       .map(df =>
         df.flatMap(row => row
           .toSeq
           .map(_.toString)
-          .zipWithIndex
-          .map(value => (value._1, row.schema.fieldNames(value._2))))
+          .zip(row.schema.fieldNames)
+          )
       )
       .reduce(_.union(_))
       .groupBy("_1")
       .agg(collect_set("_2").as("attributes"))
-
-    cells.show()
-
-    cells
       .select("attributes")
       .flatMap(row => row
         .getSeq[String](0)
-        .map(attribute => (attribute, row.getSeq[String](0).filterNot(col => col == attribute))))
-      .groupByKey(row => row._1)
-      .mapGroups((key, iterator) => iterator.reduce((attribute_set, aggregate) => attribute_set.intersect(aggregate) ))
+        .map(attribute => (attribute, row.getSeq[String](0).filterNot(_ == attribute))))
+      .groupByKey(_._1)
+      .mapGroups((key, iterator) => iterator.reduce((attribute_set, aggregate) => (attribute_set._1, attribute_set._2.intersect(aggregate._2)) ))
+      .filter(_._2.nonEmpty)
+      .sort("_1")
+      .collect()
 
+    inclusionLists
+      .foreach(inclusionList => println("%1$s < %2$s".format(inclusionList._1, inclusionList._2.mkString(", "))))
 
-
-  //  data(0)
-  //    .select(data(0)("R_NAME"))
-  //    .join(
-  //      data(0)
-  //      .select(data(0)("R_REGIONKEY")),
-  //      data(0)("R_NAME") === data(0)("R_REGIONKEY"),
-  //      joinType = "fullouter")
-  //    .show
   }
 }
-
-
-/*
-for table1 in data:
-  for table2 in data:
-    for col1 in table1:
-      for col2 in table2:
-        output = table1.join(table2, col1 == col2)
-        output.map(col1 != null ? table1)
-
-for row in data:
-  tuples = row.map(makeTuple)
-
-
-Value1 | R_REGIONKEY
-Value2 | R_REGIONKEY
-Value3 | R_REGIONKEY
-Value4 | R_NAME
-Value3 | R_NAME
-
--->
-
-R_NAME | R_REGIONKEY
-
-R_REGIONKEY | NAME | N_REGIONKEY
-
-Value 1 | Null | Value 1 --> {R_REGIONKEY, N_REGIONKEY}
-Value 2 | Null | Null --> R_REGIONKEY
-Null    | Null | Value 3 --> N_REGIONKEY
-
-
-Null | Value 4 | Null
- */
